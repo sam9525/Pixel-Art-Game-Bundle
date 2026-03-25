@@ -1,5 +1,5 @@
 name: pixel_art_game_bundle
-description: "A new Flutter project."
+description: "Agentic Pixel Arcade - 20 classic games with PICO-8 aesthetics"
 publish_to: 'none'
 version: 0.1.0
 
@@ -9,6 +9,9 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flame: ^1.22.0
+  shared_preferences: ^2.3.0
+  google_fonts: ^6.2.1
 
 dev_dependencies:
   flutter_test:
@@ -17,3 +20,8 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  fonts:
+    - family: PressStart2P
+      fonts:
+        - asset: assets/fonts/PressStart2P-Regular.ttf
