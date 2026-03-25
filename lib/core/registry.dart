@@ -3,6 +3,7 @@ import 'dart:ui' show Color;
 import 'base_game.dart';
 import 'palette.dart';
 import '../games/pong.dart';
+import '../games/snake.dart';
 
 /// Metadata and factory for a single arcade game.
 class GameEntry {
@@ -36,5 +37,12 @@ final Map<String, GameEntry> gameRegistry = {
     factory: () => PongGame(),
     color: Pico8Palette.blue,
     icon: '🏓',
+  ),
+  'snake': GameEntry(
+    id: 'snake',
+    title: 'Snake',
+    factory: () => SnakeGame(),
+    color: Pico8Palette.green,
+    icon: '🐍',
   ),
 };
