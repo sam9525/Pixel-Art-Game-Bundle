@@ -7,6 +7,7 @@ import '../games/snake.dart';
 import '../games/breakout.dart';
 import '../games/flappy.dart';
 import '../games/space_invaders.dart';
+import '../games/tetris.dart';
 
 /// Metadata and factory for a single arcade game.
 class GameEntry {
@@ -68,5 +69,12 @@ final Map<String, GameEntry> gameRegistry = {
     factory: () => SpaceInvadersGame(),
     color: Pico8Palette.lavender,
     icon: '👾',
+  ),
+  'tetris': GameEntry(
+    id: 'tetris',
+    title: 'Tetris',
+    factory: () => TetrisGame(),
+    color: Pico8Palette.darkPurple,
+    icon: '🟦',
   ),
 };
