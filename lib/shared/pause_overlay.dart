@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../core/palette.dart';
 
-/// Full-screen "PAUSED" overlay for Flame games.
+/// Fast, utilitarian "PAUSED" overlay for Flame games.
 ///
-/// Features a slow-pulsing title, CRT scanline effect, and decorative
-/// pixel border. Provides Resume and Quit actions.
+/// Designed as a quick modal interruption — not cinematic like the start
+/// overlay. Features a hard-blink title, tap-anywhere resume, keyboard
+/// support, and minimal animation (150ms entrance).
 class PauseOverlay extends StatefulWidget {
   const PauseOverlay({
     super.key,
@@ -21,190 +23,332 @@ class PauseOverlay extends StatefulWidget {
 }
 
 class _PauseOverlayState extends State<PauseOverlay>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _pulseController;
-  late final Animation<double> _scaleAnimation;
+    with TickerProviderStateMixin {
+  // C1: Entrance fade + slide (one-shot, 150ms)
+  late final AnimationController _overlayController;
+  late final CurvedAnimation _overlayCurve;
+
+  // C2: "PAUSED" hard blink (loops after entrance)
+  late final AnimationController _blinkController;
+
+  // C3: Button press feedback (one-shot, 100ms)
+  late final AnimationController _feedbackController;
+
+  late final FocusNode _focusNode;
+  bool _actionTaken = false;
+  VoidCallback? _pendingAction;
 
   @override
   void initState() {
     super.initState();
+    _focusNode = FocusNode();
 
-    _pulseController = AnimationController(
+    // C1: Entrance
+    _overlayController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1200),
-    )..repeat(reverse: true);
-
-    _scaleAnimation = Tween<double>(begin: 1.0, end: 1.1).animate(
-      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+      duration: const Duration(milliseconds: 150),
     );
+    _overlayCurve = CurvedAnimation(
+      parent: _overlayController,
+      curve: Curves.easeOutCubic,
+    );
+
+    // C2: Hard blink (starts after entrance)
+    _blinkController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
+
+    // C3: Button feedback
+    _feedbackController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 100),
+    );
+    _feedbackController.addStatusListener((status) {
+      if (status == AnimationStatus.completed) {
+        _pendingAction?.call();
+      }
+    });
+
+    // Play entrance, then start blink loop
+    _overlayController.forward();
+    _overlayController.addStatusListener((status) {
+      if (status == AnimationStatus.completed) {
+        _blinkController.repeat(reverse: true);
+      }
+    });
   }
 
   @override
   void dispose() {
-    _pulseController.dispose();
+    _focusNode.dispose();
+    _feedbackController.dispose();
+    _blinkController.dispose();
+    _overlayCurve.dispose();
+    _overlayController.dispose();
     super.dispose();
+  }
+
+  void _handleResume() {
+    if (_actionTaken) return;
+    _actionTaken = true;
+    widget.onResume();
+  }
+
+  void _handleButtonTap(VoidCallback action) {
+    if (_actionTaken) return;
+    _actionTaken = true;
+    _pendingAction = action;
+    _feedbackController.forward(from: 0.0);
+  }
+
+  void _handleKeyEvent(KeyEvent event) {
+    if (event is! KeyDownEvent) return;
+    if (event.logicalKey == LogicalKeyboardKey.escape ||
+        event.logicalKey == LogicalKeyboardKey.space ||
+        event.logicalKey == LogicalKeyboardKey.enter) {
+      _handleResume();
+    } else if (event.logicalKey == LogicalKeyboardKey.keyQ) {
+      if (!_actionTaken) {
+        _actionTaken = true;
+        widget.onQuit();
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final shortSide = constraints.maxWidth < constraints.maxHeight
-            ? constraints.maxWidth
-            : constraints.maxHeight;
-        final titleSize = (shortSide * 0.06).clamp(14.0, 32.0);
-        final bodySize = (shortSide * 0.03).clamp(8.0, 16.0);
-        final buttonPadH = (shortSide * 0.05).clamp(12.0, 32.0);
-        final buttonPadV = (shortSide * 0.02).clamp(8.0, 16.0);
-        final spacing = (shortSide * 0.03).clamp(8.0, 24.0);
+    return KeyboardListener(
+      focusNode: _focusNode,
+      autofocus: true,
+      onKeyEvent: _handleKeyEvent,
+      child: GestureDetector(
+        onTap: _handleResume,
+        behavior: HitTestBehavior.translucent,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final shortSide = constraints.maxWidth < constraints.maxHeight
+                ? constraints.maxWidth
+                : constraints.maxHeight;
+            final titleSize = (shortSide * 0.055).clamp(14.0, 30.0);
+            final bodySize = (shortSide * 0.028).clamp(8.0, 14.0);
+            final hintSize = (shortSide * 0.018).clamp(6.0, 10.0);
+            final buttonPadH = (shortSide * 0.06).clamp(14.0, 36.0);
+            final buttonPadV = (shortSide * 0.02).clamp(8.0, 16.0);
+            final spacing = (shortSide * 0.03).clamp(8.0, 24.0);
 
-        return Container(
-          color: Pico8Palette.black.withValues(alpha: 0.85),
-          child: Center(
-            child: Container(
-              constraints:
-                  BoxConstraints(maxWidth: constraints.maxWidth * 0.85),
-              child: _PixelBorderBox(
+            return FadeTransition(
+              opacity: _overlayCurve,
+              child: SlideTransition(
+                position: Tween<Offset>(
+                  begin: const Offset(0, -0.05),
+                  end: Offset.zero,
+                ).animate(_overlayCurve),
                 child: Stack(
                   children: [
-                    // Main content
-                    Padding(
-                      padding: EdgeInsets.all(spacing * 1.5),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          // Pulsing "PAUSED" title
-                          ScaleTransition(
-                            scale: _scaleAnimation,
-                            child: Text(
-                              'PAUSED',
-                              style: TextStyle(
-                                fontFamily: 'PressStart2P',
-                                fontSize: titleSize,
-                                color: Pico8Palette.blue,
-                              ),
-                            ),
-                          ),
-                          SizedBox(height: spacing * 2),
-
-                          // Buttons
-                          _PauseButton(
-                            label: 'RESUME',
-                            color: Pico8Palette.green,
-                            fontSize: bodySize,
-                            paddingH: buttonPadH,
-                            paddingV: buttonPadV,
-                            onTap: widget.onResume,
-                          ),
-                          SizedBox(height: spacing),
-                          _PauseButton(
-                            label: 'QUIT',
-                            color: Pico8Palette.lightGrey,
-                            fontSize: bodySize,
-                            paddingH: buttonPadH,
-                            paddingV: buttonPadV,
-                            onTap: widget.onQuit,
-                          ),
-                        ],
-                      ),
+                    // Layer 0: Backdrop
+                    Container(
+                      color: Pico8Palette.black.withValues(alpha: 0.70),
                     ),
 
-                    // CRT scanline overlay
+                    // Layer 1: CRT scanlines (full screen)
                     Positioned.fill(
                       child: IgnorePointer(
                         child: CustomPaint(
-                          painter: _CrtScanlinePainter(),
+                          painter: const _CrtScanlinePainter(),
+                        ),
+                      ),
+                    ),
+
+                    // Layer 2: Content
+                    Positioned.fill(
+                      child: Align(
+                        alignment: const Alignment(0, -0.15),
+                        child: Container(
+                          constraints: BoxConstraints(
+                            maxWidth: constraints.maxWidth * 0.75,
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // "PAUSED" title with hard blink
+                              AnimatedBuilder(
+                                animation: _blinkController,
+                                builder: (context, child) {
+                                  final on = _blinkController.value < 0.5;
+                                  return Opacity(
+                                    opacity: on ? 1.0 : 0.3,
+                                    child: child,
+                                  );
+                                },
+                                child: Text(
+                                  'PAUSED',
+                                  style: TextStyle(
+                                    fontFamily: 'PressStart2P',
+                                    fontSize: titleSize,
+                                    color: Pico8Palette.lavender,
+                                  ),
+                                ),
+                              ),
+                              SizedBox(height: spacing),
+
+                              // Small divider (3 dots)
+                              _PixelDivider(color: Pico8Palette.lavender),
+                              SizedBox(height: spacing * 1.5),
+
+                              // RESUME button
+                              _PauseButton(
+                                label: 'RESUME',
+                                borderColor: Pico8Palette.green,
+                                textColor: Pico8Palette.green,
+                                fontSize: bodySize,
+                                paddingH: buttonPadH,
+                                paddingV: buttonPadV,
+                                feedbackAnimation: _feedbackController,
+                                onTap: () =>
+                                    _handleButtonTap(widget.onResume),
+                              ),
+                              SizedBox(height: spacing * 0.6),
+
+                              // QUIT button
+                              _PauseButton(
+                                label: 'QUIT',
+                                borderColor: Pico8Palette.darkGrey,
+                                textColor: Pico8Palette.lightGrey,
+                                fontSize: bodySize,
+                                paddingH: buttonPadH,
+                                paddingV: buttonPadV,
+                                feedbackAnimation: _feedbackController,
+                                onTap: () =>
+                                    _handleButtonTap(widget.onQuit),
+                              ),
+                              SizedBox(height: spacing * 1.2),
+
+                              // Hint text
+                              Text(
+                                'TAP ANYWHERE TO RESUME',
+                                style: TextStyle(
+                                  fontFamily: 'PressStart2P',
+                                  fontSize: hintSize,
+                                  color: Pico8Palette.darkGrey,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
                   ],
                 ),
               ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-/// Decorative pixel border built from small squares in a checkerboard pattern.
-class _PixelBorderBox extends StatelessWidget {
-  const _PixelBorderBox({required this.child});
-
-  final Widget child;
-
-  static const double _pixelSize = 4.0;
-  static const List<Color> _borderColors = [
-    Pico8Palette.lavender,
-    Pico8Palette.darkPurple,
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return CustomPaint(
-      foregroundPainter: _PixelBorderPainter(
-        pixelSize: _pixelSize,
-        colors: _borderColors,
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(_pixelSize * 2),
-        child: Container(
-          decoration: const BoxDecoration(
-            color: Pico8Palette.darkBlue,
-          ),
-          child: child,
+            );
+          },
         ),
       ),
     );
   }
 }
 
-/// Paints a decorative checkerboard pixel border around the widget.
-class _PixelBorderPainter extends CustomPainter {
-  _PixelBorderPainter({
-    required this.pixelSize,
-    required this.colors,
-  });
+/// Minimal 3-dot pixel divider.
+class _PixelDivider extends StatelessWidget {
+  const _PixelDivider({required this.color});
 
-  final double pixelSize;
-  final List<Color> colors;
+  final Color color;
 
   @override
-  void paint(Canvas canvas, Size size) {
-    final borderThickness = pixelSize * 2;
-
-    for (double x = 0; x < size.width; x += pixelSize) {
-      for (double y = 0; y < size.height; y += pixelSize) {
-        final inBorder = y < borderThickness ||
-            y >= size.height - borderThickness ||
-            x < borderThickness ||
-            x >= size.width - borderThickness;
-        if (!inBorder) continue;
-
-        final ix = (x / pixelSize).floor();
-        final iy = (y / pixelSize).floor();
-        final colorIndex = (ix + iy) % colors.length;
-
-        final paint = Paint()..color = colors[colorIndex];
-        canvas.drawRect(
-          Rect.fromLTWH(x, y, pixelSize, pixelSize),
-          paint,
-        );
-      }
-    }
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (int i = 0; i < 3; i++) ...[
+          Container(
+            width: 4,
+            height: 4,
+            color: i == 1 ? color : color.withValues(alpha: 0.4),
+          ),
+          if (i < 2) const SizedBox(width: 4),
+        ],
+      ],
+    );
   }
-
-  @override
-  bool shouldRepaint(covariant _PixelBorderPainter oldDelegate) =>
-      oldDelegate.pixelSize != pixelSize;
 }
 
-/// Paints semi-transparent horizontal scanlines for a CRT monitor effect.
+/// Sharp-edged arcade button with press feedback.
+class _PauseButton extends StatefulWidget {
+  const _PauseButton({
+    required this.label,
+    required this.borderColor,
+    required this.textColor,
+    required this.fontSize,
+    required this.paddingH,
+    required this.paddingV,
+    required this.feedbackAnimation,
+    required this.onTap,
+  });
+
+  final String label;
+  final Color borderColor;
+  final Color textColor;
+  final double fontSize;
+  final double paddingH;
+  final double paddingV;
+  final Animation<double> feedbackAnimation;
+  final VoidCallback onTap;
+
+  @override
+  State<_PauseButton> createState() => _PauseButtonState();
+}
+
+class _PauseButtonState extends State<_PauseButton> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: (_) => setState(() => _pressed = true),
+      onTapUp: (_) {
+        setState(() => _pressed = false);
+        widget.onTap();
+      },
+      onTapCancel: () => setState(() => _pressed = false),
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        constraints: const BoxConstraints(minWidth: 120, minHeight: 44),
+        padding: EdgeInsets.symmetric(
+          horizontal: widget.paddingH,
+          vertical: widget.paddingV,
+        ),
+        decoration: BoxDecoration(
+          color: _pressed
+              ? widget.borderColor.withValues(alpha: 0.25)
+              : Pico8Palette.darkBlue,
+          border: Border.all(
+            color: widget.borderColor,
+            width: _pressed ? 3 : 2,
+          ),
+        ),
+        child: Center(
+          child: Text(
+            widget.label,
+            style: TextStyle(
+              fontFamily: 'PressStart2P',
+              fontSize: widget.fontSize,
+              color: widget.textColor,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Semi-transparent horizontal scanlines for CRT effect.
 class _CrtScanlinePainter extends CustomPainter {
+  const _CrtScanlinePainter();
+
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = Pico8Palette.black.withValues(alpha: 0.08);
+    final paint = Paint()..color = Pico8Palette.black.withValues(alpha: 0.10);
     const lineHeight = 2.0;
     const gap = 2.0;
 
@@ -218,49 +362,4 @@ class _CrtScanlinePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-/// Internal retro-styled button for the pause overlay.
-class _PauseButton extends StatelessWidget {
-  const _PauseButton({
-    required this.label,
-    required this.color,
-    required this.fontSize,
-    required this.paddingH,
-    required this.paddingV,
-    required this.onTap,
-  });
-
-  final String label;
-  final Color color;
-  final double fontSize;
-  final double paddingH;
-  final double paddingV;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: EdgeInsets.symmetric(
-          horizontal: paddingH,
-          vertical: paddingV,
-        ),
-        decoration: BoxDecoration(
-          color: Pico8Palette.darkGrey,
-          border: Border.all(color: color, width: 2),
-          borderRadius: BorderRadius.circular(4),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontFamily: 'PressStart2P',
-            fontSize: fontSize,
-            color: color,
-          ),
-        ),
-      ),
-    );
-  }
 }

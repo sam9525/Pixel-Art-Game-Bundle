@@ -8,6 +8,7 @@ import '../core/registry.dart';
 import 'game_over_overlay.dart';
 import 'pause_overlay.dart';
 import 'pixel_hud.dart';
+import 'start_overlay.dart';
 
 /// Wraps a [BaseArcadeGame] in a [GameWidget] with HUD, pause, and
 /// game-over overlays.
@@ -41,7 +42,10 @@ class _GameWrapperScreenState extends State<GameWrapperScreen> {
     if (entry == null) {
       throw ArgumentError('No game registered with id "$_gameId"');
     }
-    return entry.factory();
+    final game = entry.factory();
+    // Pause the game until the player presses start.
+    game.paused = true;
+    return game;
   }
 
   Future<void> _loadHighScore() async {
@@ -60,6 +64,11 @@ class _GameWrapperScreenState extends State<GameWrapperScreen> {
         setState(() => _highScore = score);
       }
     }
+  }
+
+  void _onStart() {
+    _game.overlays.remove('Start');
+    _game.paused = false;
   }
 
   void _onPause() {
@@ -89,8 +98,19 @@ class _GameWrapperScreenState extends State<GameWrapperScreen> {
       body: GameWidget(
         key: ValueKey(_game),
         game: _game,
-        initialActiveOverlays: const ['Hud'],
+        initialActiveOverlays: const ['Hud', 'Start'],
         overlayBuilderMap: {
+          'Start': (BuildContext ctx, Game game) {
+            final entry = gameRegistry[_gameId]!;
+            return StartOverlay(
+              title: entry.title,
+              icon: entry.icon,
+              highScore: _highScore,
+              accentColor: entry.color,
+              onStart: _onStart,
+              onQuit: _onQuit,
+            );
+          },
           'Hud': (BuildContext ctx, Game game) {
             final arcadeGame = game as BaseArcadeGame;
             return ListenableBuilder(
