@@ -11,7 +11,6 @@ import '../games/tetris.dart';
 import '../games/pacman.dart';
 import '../games/sokoban.dart';
 import '../games/lunar_lander.dart';
-import '../games/frogger.dart';
 
 /// Metadata and factory for a single arcade game.
 class GameEntry {
@@ -101,12 +100,5 @@ final Map<String, GameEntry> gameRegistry = {
     factory: () => LunarLanderGame(),
     color: Pico8Palette.lavender,
     icon: '🚀',
-  ),
-  'frogger': GameEntry(
-    id: 'frogger',
-    title: 'Frogger',
-    factory: () => FroggerGame(),
-    color: Pico8Palette.darkGreen,
-    icon: '🐸',
   ),
 };

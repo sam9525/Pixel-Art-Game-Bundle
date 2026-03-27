@@ -34,8 +34,7 @@ class _TerrainPoint {
 ///
 /// Controls: Tap left/right thirds of screen for lateral thrust,
 /// tap centre for main thruster. Keyboard: Arrow keys / WASD.
-class LunarLanderGame extends BaseArcadeGame
-    with TapCallbacks, KeyboardEvents {
+class LunarLanderGame extends BaseArcadeGame with TapCallbacks, KeyboardEvents {
   LunarLanderGame() : super(gameId: 'lunar_lander');
 
   // --- Physics constants (tuned for 256x240 canvas) ---
@@ -54,7 +53,6 @@ class LunarLanderGame extends BaseArcadeGame
   static const double _landerW = 20.0;
   static const double _landerH = 16.0;
   static const double _hitboxW = 16.0;
-  static const double _hitboxH = 14.0;
 
   // --- Terrain generation ---
   static const double _terrainMinY = 140.0;
@@ -132,10 +130,12 @@ class LunarLanderGame extends BaseArcadeGame
     _stars.clear();
     final res = BaseArcadeGame.resolution;
     for (int i = 0; i < 60; i++) {
-      _stars.add(Offset(
-        _rng.nextDouble() * res.x,
-        _rng.nextDouble() * (_terrainMinY - 10),
-      ));
+      _stars.add(
+        Offset(
+          _rng.nextDouble() * res.x,
+          _rng.nextDouble() * (_terrainMinY - 10),
+        ),
+      );
     }
   }
 
@@ -145,31 +145,50 @@ class LunarLanderGame extends BaseArcadeGame
     final w = res.x;
 
     // Determine pad position and width for this level
-    _padWidth =
-        (_basePadWidth - _padShrinkPerLevel * (_level - 1)).clamp(_minPadWidth, _basePadWidth);
+    _padWidth = (_basePadWidth - _padShrinkPerLevel * (_level - 1)).clamp(
+      _minPadWidth,
+      _basePadWidth,
+    );
     _padCentreX = _padWidth / 2 + _rng.nextDouble() * (w - _padWidth);
 
     final padLeft = _padCentreX - _padWidth / 2;
     final padRight = _padCentreX + _padWidth / 2;
 
     // Pad Y: random within lower terrain range
-    _padY = _terrainMinY + 30 + _rng.nextDouble() * (_terrainMaxY - _terrainMinY - 30);
+    _padY =
+        _terrainMinY +
+        30 +
+        _rng.nextDouble() * (_terrainMaxY - _terrainMinY - 30);
 
     // Build terrain points using midpoint displacement
     // Start with endpoints and pad flat section
     final List<_TerrainPoint> rawPoints = [];
 
     // Generate left section
-    rawPoints.addAll(_midpointDisplacement(0, _terrainMinY + _rng.nextDouble() * 40,
-        padLeft, _padY, 3));
+    rawPoints.addAll(
+      _midpointDisplacement(
+        0,
+        _terrainMinY + _rng.nextDouble() * 40,
+        padLeft,
+        _padY,
+        3,
+      ),
+    );
 
     // Flat landing pad
     rawPoints.add(_TerrainPoint(padLeft, _padY));
     rawPoints.add(_TerrainPoint(padRight, _padY));
 
     // Generate right section
-    rawPoints.addAll(_midpointDisplacement(
-        padRight, _padY, w, _terrainMinY + _rng.nextDouble() * 40, 3));
+    rawPoints.addAll(
+      _midpointDisplacement(
+        padRight,
+        _padY,
+        w,
+        _terrainMinY + _rng.nextDouble() * 40,
+        3,
+      ),
+    );
 
     // Sort by x and add ground bottom
     rawPoints.sort((a, b) => a.x.compareTo(b.x));
@@ -179,13 +198,17 @@ class LunarLanderGame extends BaseArcadeGame
   }
 
   List<_TerrainPoint> _midpointDisplacement(
-      double x1, double y1, double x2, double y2, int depth) {
+    double x1,
+    double y1,
+    double x2,
+    double y2,
+    int depth,
+  ) {
     if (depth <= 0 || (x2 - x1) < 8) {
       return [_TerrainPoint(x1, y1), _TerrainPoint(x2, y2)];
     }
     final mx = (x1 + x2) / 2;
-    final my = ((y1 + y2) / 2) +
-        (_rng.nextDouble() - 0.5) * (x2 - x1) * 0.4;
+    final my = ((y1 + y2) / 2) + (_rng.nextDouble() - 0.5) * (x2 - x1) * 0.4;
     final clampedMy = my.clamp(_terrainMinY, _terrainMaxY);
     final left = _midpointDisplacement(x1, y1, mx, clampedMy, depth - 1);
     final right = _midpointDisplacement(mx, clampedMy, x2, y2, depth - 1);
@@ -321,8 +344,7 @@ class LunarLanderGame extends BaseArcadeGame
         final padLeft = _padCentreX - _padWidth / 2;
         final padRight = _padCentreX + _padWidth / 2;
 
-        final onPad = landerLeft >= padLeft - 2 &&
-            landerRight <= padRight + 2;
+        final onPad = landerLeft >= padLeft - 2 && landerRight <= padRight + 2;
         final safeSpeed = _vy.abs() <= _safeVy && _vx.abs() <= _safeVx;
 
         if (onPad && safeSpeed) {
@@ -366,28 +388,40 @@ class LunarLanderGame extends BaseArcadeGame
     for (int i = 0; i < 20; i++) {
       final angle = _rng.nextDouble() * pi * 2;
       final speed = 20 + _rng.nextDouble() * 60;
-      _particles.add(_Particle(
-        x: _lx,
-        y: _ly + _landerH / 2,
-        vx: cos(angle) * speed,
-        vy: sin(angle) * speed - 20,
-        life: 0.5 + _rng.nextDouble() * 0.8,
-        color: [Pico8Palette.red, Pico8Palette.orange, Pico8Palette.yellow][_rng.nextInt(3)],
-      ));
+      _particles.add(
+        _Particle(
+          x: _lx,
+          y: _ly + _landerH / 2,
+          vx: cos(angle) * speed,
+          vy: sin(angle) * speed - 20,
+          life: 0.5 + _rng.nextDouble() * 0.8,
+          color: [
+            Pico8Palette.red,
+            Pico8Palette.orange,
+            Pico8Palette.yellow,
+          ][_rng.nextInt(3)],
+        ),
+      );
     }
   }
 
   void _spawnThrustParticles(double dirX, double dirY, int count) {
     for (int i = 0; i < count; i++) {
       final spread = (_rng.nextDouble() - 0.5) * 10;
-      _particles.add(_Particle(
-        x: _lx + dirX * -8 + (dirY != 0 ? spread : 0),
-        y: _ly + _landerH + dirY * -4 + (dirX != 0 ? spread : 0),
-        vx: dirX * (20 + _rng.nextDouble() * 30) + spread,
-        vy: dirY * (20 + _rng.nextDouble() * 30),
-        life: 0.2 + _rng.nextDouble() * 0.3,
-        color: [Pico8Palette.orange, Pico8Palette.yellow, Pico8Palette.red][_rng.nextInt(3)],
-      ));
+      _particles.add(
+        _Particle(
+          x: _lx + dirX * -8 + (dirY != 0 ? spread : 0),
+          y: _ly + _landerH + dirY * -4 + (dirX != 0 ? spread : 0),
+          vx: dirX * (20 + _rng.nextDouble() * 30) + spread,
+          vy: dirY * (20 + _rng.nextDouble() * 30),
+          life: 0.2 + _rng.nextDouble() * 0.3,
+          color: [
+            Pico8Palette.orange,
+            Pico8Palette.yellow,
+            Pico8Palette.red,
+          ][_rng.nextInt(3)],
+        ),
+      );
     }
   }
 
@@ -442,7 +476,10 @@ class LunarLanderGame extends BaseArcadeGame
   // --- Input: Keyboard ---
 
   @override
-  KeyEventResult onKeyEvent(KeyEvent event, Set<LogicalKeyboardKey> keysPressed) {
+  KeyEventResult onKeyEvent(
+    KeyEvent event,
+    Set<LogicalKeyboardKey> keysPressed,
+  ) {
     if (_state == _GameState.waiting && event is KeyDownEvent) {
       _state = _GameState.flying;
       return KeyEventResult.handled;
@@ -450,11 +487,14 @@ class LunarLanderGame extends BaseArcadeGame
 
     if (_state != _GameState.flying) return KeyEventResult.ignored;
 
-    _thrustMain = keysPressed.contains(LogicalKeyboardKey.arrowUp) ||
+    _thrustMain =
+        keysPressed.contains(LogicalKeyboardKey.arrowUp) ||
         keysPressed.contains(LogicalKeyboardKey.keyW);
-    _thrustLeft = keysPressed.contains(LogicalKeyboardKey.arrowLeft) ||
+    _thrustLeft =
+        keysPressed.contains(LogicalKeyboardKey.arrowLeft) ||
         keysPressed.contains(LogicalKeyboardKey.keyA);
-    _thrustRight = keysPressed.contains(LogicalKeyboardKey.arrowRight) ||
+    _thrustRight =
+        keysPressed.contains(LogicalKeyboardKey.arrowRight) ||
         keysPressed.contains(LogicalKeyboardKey.keyD);
 
     return KeyEventResult.handled;
@@ -583,7 +623,8 @@ class _TerrainRenderer extends PositionComponent {
 
     // Blink centre marker when waiting or flying
     if (game._state == _GameState.waiting || game._state == _GameState.flying) {
-      final blink = (game._thrustFlicker * 0.5).floor() % 2 == 0 ||
+      final blink =
+          (game._thrustFlicker * 0.5).floor() % 2 == 0 ||
           game._state == _GameState.waiting;
       if (blink) {
         final cx = game._padCentreX - 1;
@@ -614,7 +655,10 @@ class _LanderRenderer extends PositionComponent {
 
   @override
   void render(Canvas canvas) {
-    if (game._state == _GameState.crashed || game._state == _GameState.gameOver) return;
+    if (game._state == _GameState.crashed ||
+        game._state == _GameState.gameOver) {
+      return;
+    }
 
     final lx = game._lx;
     final ly = game._ly;
@@ -650,7 +694,10 @@ class _LanderRenderer extends PositionComponent {
       final paint = flicker % 2 == 0 ? _thrustPaint : _thrustBright;
       // Main flame (centre bottom)
       canvas.drawRect(Rect.fromLTWH(lx - 3, top + h, 6, flameH), paint);
-      canvas.drawRect(Rect.fromLTWH(lx - 1, top + h + flameH, 2, 2), _thrustBright);
+      canvas.drawRect(
+        Rect.fromLTWH(lx - 1, top + h + flameH, 2, 2),
+        _thrustBright,
+      );
     }
 
     if (game._thrustLeft && game._fuel > 0) {
@@ -695,7 +742,6 @@ class _HudRenderer extends PositionComponent {
   final LunarLanderGame game;
 
   late final TextPaint _labelPaint;
-  late final TextPaint _valuePaint;
   late final TextPaint _msgPaint;
   late final TextPaint _smallPaint;
 
@@ -708,13 +754,6 @@ class _HudRenderer extends PositionComponent {
     _labelPaint = TextPaint(
       style: TextStyle(
         color: Pico8Palette.darkGrey,
-        fontSize: 6,
-        fontFamily: 'PressStart2P',
-      ),
-    );
-    _valuePaint = TextPaint(
-      style: TextStyle(
-        color: Pico8Palette.white,
         fontSize: 6,
         fontFamily: 'PressStart2P',
       ),
@@ -773,22 +812,43 @@ class _HudRenderer extends PositionComponent {
     ).render(canvas, vxText, Vector2(res.x - 70, 14));
 
     // Level indicator
-    _labelPaint.render(canvas, 'LVL ${game._level}', Vector2(res.x / 2 - 16, 4));
+    _labelPaint.render(
+      canvas,
+      'LVL ${game._level}',
+      Vector2(res.x / 2 - 16, 4),
+    );
 
     // State messages
     if (game._state == _GameState.waiting) {
-      _msgPaint.render(canvas, 'TAP TO START', Vector2(res.x / 2 - 52, res.y / 2));
+      _msgPaint.render(
+        canvas,
+        'TAP TO START',
+        Vector2(res.x / 2 - 52, res.y / 2),
+      );
       _smallPaint.render(
-          canvas, 'LAND ON THE PAD', Vector2(res.x / 2 - 52, res.y / 2 + 14));
+        canvas,
+        'LAND ON THE PAD',
+        Vector2(res.x / 2 - 52, res.y / 2 + 14),
+      );
     } else if (game._state == _GameState.landed) {
-      _msgPaint.render(canvas, 'LANDED!', Vector2(res.x / 2 - 30, res.y / 2 - 20));
+      _msgPaint.render(
+        canvas,
+        'LANDED!',
+        Vector2(res.x / 2 - 30, res.y / 2 - 20),
+      );
       final bonus = (game._fuel * 5).round();
       _smallPaint.render(
-          canvas, 'FUEL BONUS: $bonus', Vector2(res.x / 2 - 46, res.y / 2 - 6));
+        canvas,
+        'FUEL BONUS: $bonus',
+        Vector2(res.x / 2 - 46, res.y / 2 - 6),
+      );
     } else if (game._state == _GameState.crashed) {
       TextPaint(
         style: TextStyle(
-            color: Pico8Palette.red, fontSize: 8, fontFamily: 'PressStart2P'),
+          color: Pico8Palette.red,
+          fontSize: 8,
+          fontFamily: 'PressStart2P',
+        ),
       ).render(canvas, 'CRASHED!', Vector2(res.x / 2 - 34, res.y / 2 - 10));
     }
 
@@ -803,11 +863,18 @@ class _HudRenderer extends PositionComponent {
       // Zone labels at very bottom
       final zonePaint = TextPaint(
         style: TextStyle(
-            color: Pico8Palette.darkBlue, fontSize: 5, fontFamily: 'PressStart2P'),
+          color: Pico8Palette.darkBlue,
+          fontSize: 5,
+          fontFamily: 'PressStart2P',
+        ),
       );
       zonePaint.render(canvas, '<', Vector2(third / 2 - 2, res.y - 8));
       zonePaint.render(canvas, '^', Vector2(res.x / 2 - 2, res.y - 8));
-      zonePaint.render(canvas, '>', Vector2(third * 2 + third / 2 - 2, res.y - 8));
+      zonePaint.render(
+        canvas,
+        '>',
+        Vector2(third * 2 + third / 2 - 2, res.y - 8),
+      );
     }
   }
 }
@@ -818,12 +885,12 @@ class _HudRenderer extends PositionComponent {
 
 class _ScreenFlash extends RectangleComponent {
   _ScreenFlash({required Vector2 size})
-      : super(
-          position: Vector2.zero(),
-          size: size,
-          paint: Paint()..color = Pico8Palette.red,
-          priority: 100,
-        );
+    : super(
+        position: Vector2.zero(),
+        size: size,
+        paint: Paint()..color = Pico8Palette.red,
+        priority: 100,
+      );
 
   double _timer = 0;
   static const double _duration = 0.2;
