@@ -1,21 +1,30 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../core/palette.dart';
 
-/// Full-screen "GAME OVER" overlay for Flame games.
+/// Cinematic "arcade power-off" game over overlay.
 ///
-/// Displays the final [score] and [highScore] with animated effects,
-/// plus Restart and Quit actions. Features flashing title text, score
-/// count-up animation, CRT scanlines, and decorative pixel borders.
+/// Displays a staggered title-sequence with floating pixel particles,
+/// CRT effects, and the final score. Matches the design language of
+/// [StartOverlay] with game-specific icon, title, and accent color.
 class GameOverOverlay extends StatefulWidget {
   const GameOverOverlay({
     super.key,
+    required this.title,
+    required this.icon,
+    required this.accentColor,
     required this.score,
     required this.highScore,
     required this.onRestart,
     required this.onQuit,
   });
 
+  final String title;
+  final String icon;
+  final Color accentColor;
   final int score;
   final int highScore;
   final VoidCallback onRestart;
@@ -27,21 +36,64 @@ class GameOverOverlay extends StatefulWidget {
 
 class _GameOverOverlayState extends State<GameOverOverlay>
     with TickerProviderStateMixin {
+  // C1: Staggered entrance (one-shot)
+  late final AnimationController _entranceController;
+  // C2: "PRESS START" blink (used for RESTART prompt)
   late final AnimationController _flashController;
+  // C3: Title glow breathing
+  late final AnimationController _glowController;
+  // C4: Background particles
+  late final AnimationController _particleController;
+  // C5: Score count-up
   late final AnimationController _countUpController;
   late final Animation<int> _countUpAnimation;
+
+  late final FocusNode _focusNode;
+
+  // Pre-computed entrance sub-animations
+  late final Animation<double> _bgFade;
+  late final Animation<double> _iconFade;
+  late final Animation<double> _dividerFade;
+  late final Animation<double> _scoreFade;
+  late final Animation<double> _promptFade;
+  late final Animation<double> _backFade;
 
   @override
   void initState() {
     super.initState();
+    _focusNode = FocusNode();
 
-    // Flashing title + "NEW HIGH SCORE!" blink — repeats forever.
+    // C1: Entrance sequence
+    _entranceController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1800),
+    );
+    _bgFade = _stagger(0.0, 0.25);
+    _iconFade = _stagger(0.15, 0.35);
+    _dividerFade = _stagger(0.45, 0.60);
+    _scoreFade = _stagger(0.55, 0.70);
+    _promptFade = _stagger(0.65, 0.85);
+    _backFade = _stagger(0.75, 1.0);
+
+    // C2: Flash (starts after entrance)
     _flashController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 600),
+      duration: const Duration(milliseconds: 1000),
+    );
+
+    // C3: Title glow (starts immediately)
+    _glowController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2400),
     )..repeat(reverse: true);
 
-    // Score count-up from 0 → final score over ~1 second.
+    // C4: Particles (starts immediately)
+    _particleController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 8000),
+    )..repeat();
+
+    // C5: Score count-up from 0 → final score over ~1 second.
     _countUpController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1000),
@@ -54,236 +106,585 @@ class _GameOverOverlayState extends State<GameOverOverlay>
       curve: Curves.easeOut,
     ));
     _countUpController.forward();
+
+    // Start entrance, then begin flash loop
+    _entranceController.forward();
+    _entranceController.addStatusListener((status) {
+      if (status == AnimationStatus.completed) {
+        _flashController.repeat(reverse: true);
+      }
+    });
+  }
+
+  CurvedAnimation _stagger(double begin, double end) {
+    return CurvedAnimation(
+      parent: _entranceController,
+      curve: Interval(begin, end, curve: Curves.easeOutCubic),
+    );
   }
 
   @override
   void dispose() {
-    _flashController.dispose();
+    _focusNode.dispose();
     _countUpController.dispose();
+    _particleController.dispose();
+    _glowController.dispose();
+    _flashController.dispose();
+    _entranceController.dispose();
     super.dispose();
+  }
+
+  void _handleKeyEvent(KeyEvent event) {
+    if (event is! KeyDownEvent) return;
+    if (event.logicalKey == LogicalKeyboardKey.space ||
+        event.logicalKey == LogicalKeyboardKey.enter) {
+      widget.onRestart();
+    } else if (event.logicalKey == LogicalKeyboardKey.escape) {
+      widget.onQuit();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final isNewHighScore = widget.score > widget.highScore;
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final shortSide = constraints.maxWidth < constraints.maxHeight
-            ? constraints.maxWidth
-            : constraints.maxHeight;
-        final titleSize = (shortSide * 0.06).clamp(14.0, 32.0);
-        final bodySize = (shortSide * 0.03).clamp(8.0, 16.0);
-        final smallSize = (shortSide * 0.022).clamp(6.0, 12.0);
-        final buttonPadH = (shortSide * 0.05).clamp(12.0, 32.0);
-        final buttonPadV = (shortSide * 0.02).clamp(8.0, 16.0);
-        final spacing = (shortSide * 0.03).clamp(8.0, 24.0);
+    return KeyboardListener(
+      focusNode: _focusNode,
+      autofocus: true,
+      onKeyEvent: _handleKeyEvent,
+      child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final shortSide = constraints.maxWidth < constraints.maxHeight
+                ? constraints.maxWidth
+                : constraints.maxHeight;
+            final titleSize = (shortSide * 0.055).clamp(12.0, 28.0);
+            final bodySize = (shortSide * 0.03).clamp(8.0, 16.0);
+            final smallSize = (shortSide * 0.022).clamp(6.0, 12.0);
+            final iconSize = (shortSide * 0.12).clamp(32.0, 64.0);
+            final spacing = (shortSide * 0.03).clamp(8.0, 24.0);
+            final buttonPadH = (shortSide * 0.05).clamp(12.0, 32.0);
+            final buttonPadV = (shortSide * 0.02).clamp(8.0, 16.0);
 
-        return Container(
-          color: Pico8Palette.black.withValues(alpha: 0.85),
-          child: Center(
-            child: Container(
-              constraints:
-                  BoxConstraints(maxWidth: constraints.maxWidth * 0.85),
-              child: _PixelBorderBox(
-                child: Stack(
-                  children: [
-                    // Main content
-                    Padding(
-                      padding: EdgeInsets.all(spacing * 1.5),
+            const gameOverText = 'GAME OVER';
+            final gameOverLetters = gameOverText.characters.toList();
+            final titleLetters = widget.title.toUpperCase().characters.toList();
+
+            return Stack(
+              children: [
+                // Layer 0: Background fade
+                FadeTransition(
+                  opacity: _bgFade,
+                  child: Container(
+                    color: Pico8Palette.black.withValues(alpha: 0.95),
+                  ),
+                ),
+
+                // Layer 1: Floating pixel particles
+                Positioned.fill(
+                  child: CustomPaint(
+                    painter: _PixelParticlePainter(
+                      animation: _particleController,
+                      accentColor: widget.accentColor,
+                    ),
+                  ),
+                ),
+
+                // Layer 2: CRT scanlines (full screen)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: CustomPaint(
+                      painter: const _CrtScanlinePainter(),
+                    ),
+                  ),
+                ),
+
+                // Layer 3: Main content
+                Positioned.fill(
+                  child: Align(
+                    alignment: const Alignment(0, -0.1),
+                    child: Container(
+                      constraints: BoxConstraints(
+                        maxWidth: constraints.maxWidth * 0.85,
+                      ),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          // Flashing "GAME OVER" title
+                          // Icon
+                          FadeTransition(
+                            opacity: _iconFade,
+                            child: SlideTransition(
+                              position: Tween<Offset>(
+                                begin: const Offset(0, 0.3),
+                                end: Offset.zero,
+                              ).animate(_iconFade),
+                              child: Text(
+                                widget.icon,
+                                style: TextStyle(fontSize: iconSize),
+                              ),
+                            ),
+                          ),
+                          SizedBox(height: spacing * 0.4),
+
+                          // Title: letter-by-letter stagger
                           AnimatedBuilder(
-                            animation: _flashController,
-                            builder: (context, child) {
-                              final color = Color.lerp(
-                                Pico8Palette.red,
-                                Pico8Palette.darkPurple,
-                                _flashController.value,
-                              )!;
-                              return Text(
-                                'GAME OVER',
-                                style: TextStyle(
-                                  fontFamily: 'PressStart2P',
-                                  fontSize: titleSize,
-                                  color: color,
-                                ),
+                            animation: _entranceController,
+                            builder: (context, _) {
+                              return AnimatedBuilder(
+                                animation: _glowController,
+                                builder: (context, _) {
+                                  final glowBlur =
+                                      8.0 + 8.0 * _glowController.value;
+                                  final glowAlpha =
+                                      0.3 + 0.3 * _glowController.value;
+                                  return Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      for (int i = 0;
+                                          i < titleLetters.length;
+                                          i++)
+                                        _buildTitleLetter(
+                                          titleLetters[i],
+                                          i,
+                                          titleLetters.length,
+                                          titleSize * 0.8,
+                                          glowBlur,
+                                          glowAlpha,
+                                        ),
+                                    ],
+                                  );
+                                },
                               );
                             },
                           ),
-                          SizedBox(height: spacing * 1.5),
+                          SizedBox(height: spacing * 0.4),
+
+                          // Divider
+                          FadeTransition(
+                            opacity: _dividerFade,
+                            child: _PixelDivider(
+                              color: widget.accentColor,
+                            ),
+                          ),
+                          SizedBox(height: spacing * 0.8),
+
+                          // "GAME OVER": letter-by-letter with flashing
+                          AnimatedBuilder(
+                            animation: _entranceController,
+                            builder: (context, _) {
+                              return AnimatedBuilder(
+                                animation: _flashController,
+                                builder: (context, _) {
+                                  final flashVal = _flashController.value;
+                                  final glowBlur = 4.0 + 12.0 * flashVal;
+                                  return Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      for (int i = 0;
+                                          i < gameOverLetters.length;
+                                          i++)
+                                        _buildGameOverLetter(
+                                          gameOverLetters[i],
+                                          i,
+                                          gameOverLetters.length,
+                                          titleSize,
+                                          glowBlur,
+                                          flashVal,
+                                        ),
+                                    ],
+                                  );
+                                },
+                              );
+                            },
+                          ),
+                          SizedBox(height: spacing),
 
                           // Score count-up
-                          AnimatedBuilder(
-                            animation: _countUpAnimation,
-                            builder: (context, child) {
-                              return Text(
-                                'SCORE  ${_countUpAnimation.value.toString().padLeft(6, '0')}',
-                                style: TextStyle(
-                                  fontFamily: 'PressStart2P',
-                                  fontSize: bodySize,
-                                  color: Pico8Palette.yellow,
-                                ),
-                              );
-                            },
+                          FadeTransition(
+                            opacity: _scoreFade,
+                            child: AnimatedBuilder(
+                              animation: _countUpAnimation,
+                              builder: (context, child) {
+                                return Text(
+                                  'SCORE  ${_countUpAnimation.value.toString().padLeft(6, '0')}',
+                                  style: TextStyle(
+                                    fontFamily: 'PressStart2P',
+                                    fontSize: bodySize,
+                                    color: Pico8Palette.yellow,
+                                  ),
+                                );
+                              },
+                            ),
                           ),
-                          SizedBox(height: spacing * 0.6),
+                          SizedBox(height: spacing * 0.5),
 
                           // High score
-                          Text(
-                            'BEST   ${widget.highScore.toString().padLeft(6, '0')}',
-                            style: TextStyle(
-                              fontFamily: 'PressStart2P',
-                              fontSize: bodySize,
-                              color: Pico8Palette.orange,
+                          FadeTransition(
+                            opacity: _scoreFade,
+                            child: Text(
+                              'BEST   ${widget.highScore.toString().padLeft(6, '0')}',
+                              style: TextStyle(
+                                fontFamily: 'PressStart2P',
+                                fontSize: bodySize,
+                                color: Pico8Palette.orange,
+                              ),
                             ),
                           ),
 
                           // New high score indicator
                           if (isNewHighScore) ...[
-                            SizedBox(height: spacing),
-                            AnimatedBuilder(
-                              animation: _flashController,
-                              builder: (context, child) {
-                                return Opacity(
-                                  opacity:
-                                      _flashController.value > 0.5 ? 1.0 : 0.0,
-                                  child: Text(
-                                    'NEW HIGH SCORE!',
-                                    style: TextStyle(
-                                      fontFamily: 'PressStart2P',
-                                      fontSize: smallSize,
-                                      color: Pico8Palette.yellow,
+                            SizedBox(height: spacing * 0.5),
+                            FadeTransition(
+                              opacity: _scoreFade,
+                              child: AnimatedBuilder(
+                                animation: _flashController,
+                                builder: (context, child) {
+                                  return Opacity(
+                                    opacity:
+                                        _flashController.value > 0.5 ? 1.0 : 0.0,
+                                    child: Text(
+                                      'NEW HIGH SCORE!',
+                                      style: TextStyle(
+                                        fontFamily: 'PressStart2P',
+                                        fontSize: smallSize,
+                                        color: Pico8Palette.yellow,
+                                        shadows: [
+                                          Shadow(
+                                            color: Pico8Palette.yellow
+                                                .withValues(alpha: 0.8),
+                                            blurRadius: 8,
+                                          ),
+                                        ],
+                                      ),
                                     ),
-                                  ),
-                                );
-                              },
+                                  );
+                                },
+                              ),
                             ),
                           ],
 
-                          SizedBox(height: spacing * 2),
+                          SizedBox(height: spacing * 1.5),
 
-                          // Buttons
-                          _PixelButton(
-                            label: 'RESTART',
-                            color: Pico8Palette.green,
-                            fontSize: bodySize,
-                            paddingH: buttonPadH,
-                            paddingV: buttonPadV,
-                            onTap: widget.onRestart,
+                          // RESTART button
+                          FadeTransition(
+                            opacity: _promptFade,
+                            child: _buildButton(
+                              label: 'RESTART',
+                              color: Pico8Palette.green,
+                              fontSize: bodySize,
+                              paddingH: buttonPadH,
+                              paddingV: buttonPadV,
+                              onTap: widget.onRestart,
+                            ),
                           ),
-                          SizedBox(height: spacing),
-                          _PixelButton(
-                            label: 'QUIT',
-                            color: Pico8Palette.lightGrey,
-                            fontSize: bodySize,
-                            paddingH: buttonPadH,
-                            paddingV: buttonPadV,
-                            onTap: widget.onQuit,
+                          SizedBox(height: spacing * 0.6),
+
+                          // QUIT button
+                          FadeTransition(
+                            opacity: _promptFade,
+                            child: _buildButton(
+                              label: 'QUIT',
+                              color: Pico8Palette.lightGrey,
+                              fontSize: bodySize,
+                              paddingH: buttonPadH,
+                              paddingV: buttonPadV,
+                              onTap: widget.onQuit,
+                            ),
+                          ),
+
+                          SizedBox(height: spacing * 0.5),
+
+                          // "GAME OVER" flavor text
+                          FadeTransition(
+                            opacity: _promptFade,
+                            child: Text(
+                              'TRY AGAIN',
+                              style: TextStyle(
+                                fontFamily: 'PressStart2P',
+                                fontSize: smallSize * 0.9,
+                                color: Pico8Palette.darkGrey,
+                              ),
+                            ),
                           ),
                         ],
                       ),
                     ),
+                  ),
+                ),
 
-                    // CRT scanline overlay
-                    Positioned.fill(
-                      child: IgnorePointer(
-                        child: CustomPaint(
-                          painter: _CrtScanlinePainter(),
+                // Layer 4: BACK button (bottom-left)
+                Positioned(
+                  bottom: spacing,
+                  left: spacing,
+                  child: FadeTransition(
+                    opacity: _backFade,
+                    child: GestureDetector(
+                      onTap: widget.onQuit,
+                      behavior: HitTestBehavior.opaque,
+                      child: Container(
+                        constraints: const BoxConstraints(
+                          minWidth: 48,
+                          minHeight: 48,
+                        ),
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          '< BACK',
+                          style: TextStyle(
+                            fontFamily: 'PressStart2P',
+                            fontSize: smallSize,
+                            color: Pico8Palette.lavender,
+                          ),
                         ),
                       ),
                     ),
-                  ],
+                  ),
                 ),
-              ),
-            ),
-          ),
-        );
-      },
+
+                // Layer 5: CRT vignette
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: CustomPaint(
+                      painter: const _CrtVignettePainter(),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
     );
   }
-}
 
-/// Decorative pixel border built from small squares in a checkerboard pattern.
-class _PixelBorderBox extends StatelessWidget {
-  const _PixelBorderBox({required this.child});
+  Widget _buildTitleLetter(
+    String letter,
+    int index,
+    int total,
+    double fontSize,
+    double glowBlur,
+    double glowAlpha,
+  ) {
+    const titleStart = 0.25;
+    const titleEnd = 0.55;
+    final letterDelay =
+        titleStart + (titleEnd - titleStart) * (index / total);
+    final letterProgress =
+        ((_entranceController.value - letterDelay) / 0.08).clamp(0.0, 1.0);
 
-  final Widget child;
+    final curve = Curves.easeOutCubic.transform(letterProgress);
 
-  static const double _pixelSize = 4.0;
-  static const List<Color> _borderColors = [
-    Pico8Palette.lavender,
-    Pico8Palette.darkPurple,
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return CustomPaint(
-      foregroundPainter: _PixelBorderPainter(
-        pixelSize: _pixelSize,
-        colors: _borderColors,
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(_pixelSize * 2),
-        child: Container(
-          decoration: const BoxDecoration(
-            color: Pico8Palette.darkBlue,
+    return Opacity(
+      opacity: curve,
+      child: Transform.translate(
+        offset: Offset(0, 8.0 * (1.0 - curve)),
+        child: Text(
+          letter,
+          style: TextStyle(
+            fontFamily: 'PressStart2P',
+            fontSize: fontSize,
+            color: widget.accentColor,
+            shadows: [
+              Shadow(
+                color: widget.accentColor.withValues(alpha: glowAlpha),
+                blurRadius: glowBlur,
+              ),
+              Shadow(
+                color: widget.accentColor.withValues(alpha: 0.2),
+                blurRadius: 24,
+              ),
+            ],
           ),
-          child: child,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGameOverLetter(
+    String letter,
+    int index,
+    int total,
+    double fontSize,
+    double glowBlur,
+    double flashVal,
+  ) {
+    const gameOverStart = 0.55;
+    const gameOverEnd = 0.75;
+    final letterDelay =
+        gameOverStart + (gameOverEnd - gameOverStart) * (index / total);
+    final letterProgress =
+        ((_entranceController.value - letterDelay) / 0.08).clamp(0.0, 1.0);
+
+    final curve = Curves.easeOutCubic.transform(letterProgress);
+
+    // Flash between accentColor and a contrasting color
+    final color = Color.lerp(
+      widget.accentColor,
+      Pico8Palette.darkPurple,
+      flashVal,
+    )!;
+
+    return Opacity(
+      opacity: curve,
+      child: Transform.translate(
+        offset: Offset(0, 8.0 * (1.0 - curve)),
+        child: Text(
+          letter,
+          style: TextStyle(
+            fontFamily: 'PressStart2P',
+            fontSize: fontSize,
+            color: color,
+            shadows: [
+              Shadow(
+                color: color.withValues(alpha: 0.5 + 0.3 * flashVal),
+                blurRadius: glowBlur,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildButton({
+    required String label,
+    required Color color,
+    required double fontSize,
+    required double paddingH,
+    required double paddingV,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: paddingH,
+          vertical: paddingV,
+        ),
+        decoration: BoxDecoration(
+          color: Pico8Palette.darkGrey.withValues(alpha: 0.5),
+          border: Border.all(color: color, width: 2),
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontFamily: 'PressStart2P',
+            fontSize: fontSize,
+            color: color,
+            shadows: [
+              Shadow(
+                color: color.withValues(alpha: 0.5),
+                blurRadius: 4,
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-/// Paints a decorative checkerboard pixel border around the widget.
-class _PixelBorderPainter extends CustomPainter {
-  _PixelBorderPainter({
-    required this.pixelSize,
-    required this.colors,
-  });
+/// Wider pixel divider with brightness focused inward.
+class _PixelDivider extends StatelessWidget {
+  const _PixelDivider({required this.color});
 
-  final double pixelSize;
-  final List<Color> colors;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    const count = 9;
+    final center = count ~/ 2;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (int i = 0; i < count; i++) ...[
+          Container(
+            width: 4,
+            height: 4,
+            color: color.withValues(
+              alpha: 0.15 + 0.85 * (1.0 - (i - center).abs() / center),
+            ),
+          ),
+          if (i < count - 1) const SizedBox(width: 4),
+        ],
+      ],
+    );
+  }
+}
+
+/// Floating pixel particles drifting upward.
+class _PixelParticlePainter extends CustomPainter {
+  _PixelParticlePainter({
+    required this.animation,
+    required this.accentColor,
+  }) : super(repaint: animation);
+
+  final Animation<double> animation;
+  final Color accentColor;
+
+  static const int _particleCount = 40;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final borderThickness = pixelSize * 2;
+    final rng = math.Random(42);
 
-    for (double x = 0; x < size.width; x += pixelSize) {
-      for (double y = 0; y < size.height; y += pixelSize) {
-        // Only draw in the border region
-        final inBorder = y < borderThickness ||
-            y >= size.height - borderThickness ||
-            x < borderThickness ||
-            x >= size.width - borderThickness;
-        if (!inBorder) continue;
+    for (int i = 0; i < _particleCount; i++) {
+      final x = rng.nextDouble();
+      final baseY = rng.nextDouble();
+      final speed = 0.3 + rng.nextDouble() * 0.7;
+      final pxSize = rng.nextBool() ? 3.0 : 4.0;
+      final wobbleAmp = 10.0 + rng.nextDouble() * 10.0;
 
-        final ix = (x / pixelSize).floor();
-        final iy = (y / pixelSize).floor();
-        final colorIndex = (ix + iy) % colors.length;
+      // Vertical position (wraps)
+      final y = (baseY + animation.value * speed) % 1.0;
 
-        final paint = Paint()..color = colors[colorIndex];
-        canvas.drawRect(
-          Rect.fromLTWH(x, y, pixelSize, pixelSize),
-          paint,
-        );
+      // Horizontal wobble
+      final dx = math.sin((animation.value * 2 * math.pi) + i * 1.7) *
+          wobbleAmp /
+          size.width;
+      final px = (x + dx) % 1.0;
+
+      // Fade at edges
+      final edgeFade = (1.0 - (2.0 * (y - 0.5)).abs()).clamp(0.0, 1.0);
+      final alpha = edgeFade * 0.4;
+      if (alpha < 0.01) continue;
+
+      // Color: alternate between accent variants and dark grey
+      final Color particleColor;
+      switch (i % 3) {
+        case 0:
+          particleColor = accentColor.withValues(alpha: alpha);
+        case 1:
+          particleColor = accentColor.withValues(alpha: alpha * 0.4);
+        default:
+          particleColor = Pico8Palette.darkGrey.withValues(alpha: alpha);
       }
+
+      canvas.drawRect(
+        Rect.fromLTWH(
+          px * size.width,
+          y * size.height,
+          pxSize,
+          pxSize,
+        ),
+        Paint()..color = particleColor,
+      );
     }
   }
 
   @override
-  bool shouldRepaint(covariant _PixelBorderPainter oldDelegate) =>
-      oldDelegate.pixelSize != pixelSize;
+  bool shouldRepaint(covariant _PixelParticlePainter oldDelegate) =>
+      oldDelegate.accentColor != accentColor;
 }
 
-/// Paints semi-transparent horizontal scanlines for a CRT monitor effect.
+/// Semi-transparent horizontal scanlines for a CRT monitor effect.
 class _CrtScanlinePainter extends CustomPainter {
+  const _CrtScanlinePainter();
+
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = Pico8Palette.black.withValues(alpha: 0.08);
+    final paint = Paint()..color = Pico8Palette.black.withValues(alpha: 0.10);
     const lineHeight = 2.0;
     const gap = 2.0;
 
@@ -299,47 +700,26 @@ class _CrtScanlinePainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-/// Internal retro-styled button shared between overlay screens.
-class _PixelButton extends StatelessWidget {
-  const _PixelButton({
-    required this.label,
-    required this.color,
-    required this.fontSize,
-    required this.paddingH,
-    required this.paddingV,
-    required this.onTap,
-  });
-
-  final String label;
-  final Color color;
-  final double fontSize;
-  final double paddingH;
-  final double paddingV;
-  final VoidCallback onTap;
+/// Radial vignette darkening screen edges like a CRT tube.
+class _CrtVignettePainter extends CustomPainter {
+  const _CrtVignettePainter();
 
   @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: EdgeInsets.symmetric(
-          horizontal: paddingH,
-          vertical: paddingV,
-        ),
-        decoration: BoxDecoration(
-          color: Pico8Palette.darkGrey,
-          border: Border.all(color: color, width: 2),
-          borderRadius: BorderRadius.circular(4),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontFamily: 'PressStart2P',
-            fontSize: fontSize,
-            color: color,
-          ),
-        ),
-      ),
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    final gradient = RadialGradient(
+      center: Alignment.center,
+      radius: 1.0,
+      colors: [
+        Pico8Palette.black.withValues(alpha: 0.0),
+        Pico8Palette.black.withValues(alpha: 0.0),
+        Pico8Palette.black.withValues(alpha: 0.6),
+      ],
+      stops: const [0.0, 0.6, 1.0],
     );
+    canvas.drawRect(rect, Paint()..shader = gradient.createShader(rect));
   }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

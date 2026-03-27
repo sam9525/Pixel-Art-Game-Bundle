@@ -85,6 +85,10 @@ class _GameWrapperScreenState extends State<GameWrapperScreen> {
     setState(() {
       _game = _createGame();
     });
+    // Add Start overlay after build completes
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _game.overlays.add('Start');
+    });
   }
 
   void _onQuit() {
@@ -127,8 +131,12 @@ class _GameWrapperScreenState extends State<GameWrapperScreen> {
           },
           'GameOver': (BuildContext ctx, Game game) {
             final arcadeGame = game as BaseArcadeGame;
+            final entry = gameRegistry[_gameId]!;
             _saveHighScore(arcadeGame.score);
             return GameOverOverlay(
+              title: entry.title,
+              icon: entry.icon,
+              accentColor: entry.color,
               score: arcadeGame.score,
               highScore: _highScore,
               onRestart: _onRestart,
@@ -136,7 +144,11 @@ class _GameWrapperScreenState extends State<GameWrapperScreen> {
             );
           },
           'Pause': (BuildContext ctx, Game game) {
+            final entry = gameRegistry[_gameId]!;
             return PauseOverlay(
+              title: entry.title,
+              icon: entry.icon,
+              accentColor: entry.color,
               onResume: _onResume,
               onQuit: _onQuit,
             );
