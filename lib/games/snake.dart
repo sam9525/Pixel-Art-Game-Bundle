@@ -3,10 +3,10 @@ import 'dart:ui' hide TextStyle;
 
 import 'package:flame/components.dart';
 import 'package:flame/events.dart';
-import 'package:flutter/painting.dart' show TextStyle;
 
 import '../core/base_game.dart';
 import '../core/palette.dart';
+import '../shared/game_components.dart';
 
 /// Classic Snake arcade game with pixel-art aesthetics.
 ///
@@ -48,7 +48,7 @@ class SnakeGame extends BaseArcadeGame with DragCallbacks {
   bool _alive = true;
 
   // Visual effect components (added to world in onLoad).
-  late _ScreenFlash _screenFlash;
+  late SharedScreenFlash _screenFlash;
 
   @override
   Color backgroundColor() => Pico8Palette.black;
@@ -59,7 +59,7 @@ class SnakeGame extends BaseArcadeGame with DragCallbacks {
 
     final res = BaseArcadeGame.resolution;
 
-    _screenFlash = _ScreenFlash(size: res.clone());
+    _screenFlash = SharedScreenFlash(size: res.clone());
 
     world.addAll([
       _BorderWalls(),
@@ -67,7 +67,7 @@ class SnakeGame extends BaseArcadeGame with DragCallbacks {
       _SnakeRenderer(game: this),
       _FoodRenderer(game: this),
       _screenFlash,
-      _HudComponent(game: this),
+      SharedHudComponent(game: this),
     ]);
 
     _initSnake();
@@ -161,7 +161,11 @@ class SnakeGame extends BaseArcadeGame with DragCallbacks {
         newHead.x * _cellSize + _cellSize / 2,
         newHead.y * _cellSize.toDouble(),
       );
-      world.add(_ScorePopup(position: popupPos));
+      world.add(SharedScorePopup(
+        position: popupPos,
+        lifetime: 0.5,
+        driftSpeed: 40.0,
+      ));
 
       // Speed up every 5 foods.
       if (_foodsEaten % 5 == 0) {
@@ -467,117 +471,5 @@ class _FoodRenderer extends PositionComponent {
       Rect.fromLTWH(fx + 2, fy + 2, 1, 1),
       _highlightPaint,
     );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Score popup: floating "+10" text that drifts up and fades
-// ---------------------------------------------------------------------------
-
-class _ScorePopup extends PositionComponent {
-  _ScorePopup({required super.position});
-
-  static const double _lifetime = 0.5;
-  static const double _driftSpeed = 40.0;
-
-  double _elapsed = 0;
-
-  @override
-  void update(double dt) {
-    super.update(dt);
-    _elapsed += dt;
-    position.y -= _driftSpeed * dt;
-    if (_elapsed >= _lifetime) {
-      removeFromParent();
-    }
-  }
-
-  @override
-  void render(Canvas canvas) {
-    super.render(canvas);
-    final opacity = (1.0 - (_elapsed / _lifetime)).clamp(0.0, 1.0);
-    final style = TextStyle(
-      color: Pico8Palette.yellow.withValues(alpha: opacity),
-      fontSize: 7,
-      fontFamily: 'monospace',
-    );
-    TextPaint(style: style).render(canvas, '+10', Vector2.zero());
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Screen flash on life loss
-// ---------------------------------------------------------------------------
-
-class _ScreenFlash extends RectangleComponent {
-  _ScreenFlash({required Vector2 size})
-      : super(
-          position: Vector2.zero(),
-          size: size,
-          paint: Paint()..color = Pico8Palette.darkPurple,
-          priority: 100,
-        );
-
-  double _timer = 0;
-  static const double _duration = 0.15;
-  bool _active = false;
-
-  @override
-  Future<void> onLoad() async {
-    await super.onLoad();
-    paint.color = Pico8Palette.darkPurple.withValues(alpha: 0);
-  }
-
-  void trigger() {
-    _active = true;
-    _timer = _duration;
-    paint.color = Pico8Palette.darkPurple;
-  }
-
-  @override
-  void update(double dt) {
-    super.update(dt);
-    if (_active) {
-      _timer -= dt;
-      if (_timer <= 0) {
-        _active = false;
-        paint.color = Pico8Palette.darkPurple.withValues(alpha: 0);
-      } else {
-        final opacity = (_timer / _duration).clamp(0.0, 1.0);
-        paint.color = Pico8Palette.darkPurple.withValues(alpha: opacity);
-      }
-    }
-  }
-}
-
-// ---------------------------------------------------------------------------
-// HUD: score and lives
-// ---------------------------------------------------------------------------
-
-class _HudComponent extends PositionComponent {
-  _HudComponent({required this.game});
-
-  final SnakeGame game;
-
-  late final TextPaint _textPaint;
-
-  @override
-  Future<void> onLoad() async {
-    await super.onLoad();
-    _textPaint = TextPaint(
-      style: TextStyle(
-        color: Pico8Palette.white,
-        fontSize: 8,
-        fontFamily: 'monospace',
-      ),
-    );
-  }
-
-  @override
-  void render(Canvas canvas) {
-    super.render(canvas);
-    // Render score and lives in the top border area.
-    _textPaint.render(canvas, 'SCORE:${game.score}', Vector2(18, 4));
-    _textPaint.render(canvas, 'LIVES:${game.lives}', Vector2(190, 4));
   }
 }

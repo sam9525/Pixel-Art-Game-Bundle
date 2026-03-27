@@ -3,10 +3,10 @@ import 'dart:ui' hide TextStyle;
 
 import 'package:flame/components.dart';
 import 'package:flame/events.dart';
-import 'package:flutter/painting.dart' show TextStyle;
 
 import '../core/base_game.dart';
 import '../core/palette.dart';
+import '../shared/game_components.dart';
 
 // ---------------------------------------------------------------------------
 // Alien type definitions
@@ -124,7 +124,7 @@ class SpaceInvadersGame extends BaseArcadeGame
   double _invulnTimer = 0.0;
 
   // Effect components.
-  late _ScreenFlash _screenFlash;
+  late SharedScreenFlash _screenFlash;
 
   @override
   Color backgroundColor() => Pico8Palette.black;
@@ -134,7 +134,7 @@ class SpaceInvadersGame extends BaseArcadeGame
     await super.onLoad();
 
     final res = BaseArcadeGame.resolution;
-    _screenFlash = _ScreenFlash(size: res.clone());
+    _screenFlash = SharedScreenFlash(size: res.clone());
 
     world.addAll([
       _BackgroundRenderer(),
@@ -144,7 +144,7 @@ class SpaceInvadersGame extends BaseArcadeGame
       _BulletRenderer(game: this),
       _UfoRenderer(game: this),
       _screenFlash,
-      _HudComponent(game: this),
+      SharedHudComponent(game: this, scorePosition: Vector2(4, 4), livesPosition: Vector2(180, 4)),
     ]);
 
     _initGame();
@@ -399,7 +399,7 @@ class SpaceInvadersGame extends BaseArcadeGame
           score += alien.points;
 
           // Spawn score popup.
-          world.add(_ScorePopup(
+          world.add(SharedScorePopup(
             position: Vector2(pos.x + _alienW / 2, pos.y),
             points: alien.points,
           ));
@@ -436,7 +436,7 @@ class SpaceInvadersGame extends BaseArcadeGame
 
       if (bulletRect.overlaps(ufoRect)) {
         score += _ufoPoints;
-        world.add(_ScorePopup(
+        world.add(SharedScorePopup(
           position: Vector2(_ufoX + _ufoW / 2, _ufoY),
           points: _ufoPoints,
         ));
@@ -942,43 +942,6 @@ class _UfoRenderer extends PositionComponent {
 }
 
 // ---------------------------------------------------------------------------
-// Score popup: floating "+N" text that drifts up and fades
-// ---------------------------------------------------------------------------
-
-class _ScorePopup extends PositionComponent {
-  _ScorePopup({required super.position, required this.points});
-
-  final int points;
-
-  static const double _lifetime = 0.8;
-  static const double _driftSpeed = 30.0;
-
-  double _elapsed = 0;
-
-  @override
-  void update(double dt) {
-    super.update(dt);
-    _elapsed += dt;
-    position.y -= _driftSpeed * dt;
-    if (_elapsed >= _lifetime) {
-      removeFromParent();
-    }
-  }
-
-  @override
-  void render(Canvas canvas) {
-    super.render(canvas);
-    final opacity = (1.0 - (_elapsed / _lifetime)).clamp(0.0, 1.0);
-    final style = TextStyle(
-      color: Pico8Palette.yellow.withValues(alpha: opacity),
-      fontSize: 7,
-      fontFamily: 'monospace',
-    );
-    TextPaint(style: style).render(canvas, '+$points', Vector2.zero());
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Explosion flash: brief white flash at destroyed entity position
 // ---------------------------------------------------------------------------
 
@@ -1006,91 +969,5 @@ class _ExplosionFlash extends PositionComponent {
     final paint = Paint()
       ..color = Pico8Palette.white.withValues(alpha: opacity);
     canvas.drawRect(rect, paint);
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Screen flash on life loss
-// ---------------------------------------------------------------------------
-
-class _ScreenFlash extends RectangleComponent {
-  _ScreenFlash({required Vector2 size})
-      : super(
-          position: Vector2.zero(),
-          size: size,
-          paint: Paint()..color = Pico8Palette.darkPurple,
-          priority: 100,
-        );
-
-  double _timer = 0;
-  static const double _duration = 0.15;
-  bool _active = false;
-
-  @override
-  Future<void> onLoad() async {
-    await super.onLoad();
-    paint.color = Pico8Palette.darkPurple.withValues(alpha: 0);
-  }
-
-  void trigger() {
-    _active = true;
-    _timer = _duration;
-    paint.color = Pico8Palette.darkPurple;
-  }
-
-  @override
-  void update(double dt) {
-    super.update(dt);
-    if (_active) {
-      _timer -= dt;
-      if (_timer <= 0) {
-        _active = false;
-        paint.color = Pico8Palette.darkPurple.withValues(alpha: 0);
-      } else {
-        final opacity = (_timer / _duration).clamp(0.0, 1.0);
-        paint.color = Pico8Palette.darkPurple.withValues(alpha: opacity);
-      }
-    }
-  }
-}
-
-// ---------------------------------------------------------------------------
-// HUD: score and lives display
-// ---------------------------------------------------------------------------
-
-class _HudComponent extends PositionComponent {
-  _HudComponent({required this.game});
-
-  final SpaceInvadersGame game;
-
-  late final TextPaint _textPaint;
-
-  @override
-  int get priority => 90;
-
-  @override
-  Future<void> onLoad() async {
-    await super.onLoad();
-    _textPaint = TextPaint(
-      style: TextStyle(
-        color: Pico8Palette.white,
-        fontSize: 8,
-        fontFamily: 'monospace',
-      ),
-    );
-  }
-
-  @override
-  void render(Canvas canvas) {
-    super.render(canvas);
-
-    // Dark background for HUD area.
-    canvas.drawRect(
-      Rect.fromLTWH(0, 0, BaseArcadeGame.resolution.x, SpaceInvadersGame._hudHeight),
-      Paint()..color = Pico8Palette.darkBlue,
-    );
-
-    _textPaint.render(canvas, 'SCORE:${game.score}', Vector2(4, 4));
-    _textPaint.render(canvas, 'LIVES:${game.lives}', Vector2(190, 4));
   }
 }

@@ -9,6 +9,7 @@ import 'package:flutter/widgets.dart' show KeyEventResult;
 
 import '../core/base_game.dart';
 import '../core/palette.dart';
+import '../shared/game_components.dart';
 
 // ---------------------------------------------------------------------------
 // Game state
@@ -100,7 +101,7 @@ class LunarLanderGame extends BaseArcadeGame with TapCallbacks, KeyboardEvents {
   // Stars (static backdrop)
   final List<Offset> _stars = [];
 
-  late _ScreenFlash _screenFlash;
+  late SharedScreenFlash _screenFlash;
 
   @override
   Color backgroundColor() => Pico8Palette.black;
@@ -110,7 +111,7 @@ class LunarLanderGame extends BaseArcadeGame with TapCallbacks, KeyboardEvents {
     await super.onLoad();
 
     final res = BaseArcadeGame.resolution;
-    _screenFlash = _ScreenFlash(size: res.clone());
+    _screenFlash = SharedScreenFlash(size: res.clone());
 
     _generateStars();
 
@@ -879,47 +880,3 @@ class _HudRenderer extends PositionComponent {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Screen flash on crash
-// ---------------------------------------------------------------------------
-
-class _ScreenFlash extends RectangleComponent {
-  _ScreenFlash({required Vector2 size})
-    : super(
-        position: Vector2.zero(),
-        size: size,
-        paint: Paint()..color = Pico8Palette.red,
-        priority: 100,
-      );
-
-  double _timer = 0;
-  static const double _duration = 0.2;
-  bool _active = false;
-
-  @override
-  Future<void> onLoad() async {
-    await super.onLoad();
-    paint.color = Pico8Palette.red.withValues(alpha: 0);
-  }
-
-  void trigger() {
-    _active = true;
-    _timer = _duration;
-    paint.color = Pico8Palette.red;
-  }
-
-  @override
-  void update(double dt) {
-    super.update(dt);
-    if (_active) {
-      _timer -= dt;
-      if (_timer <= 0) {
-        _active = false;
-        paint.color = Pico8Palette.red.withValues(alpha: 0);
-      } else {
-        final opacity = (_timer / _duration).clamp(0.0, 1.0);
-        paint.color = Pico8Palette.red.withValues(alpha: opacity * 0.6);
-      }
-    }
-  }
-}

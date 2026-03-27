@@ -7,6 +7,7 @@ import 'package:flutter/painting.dart' show TextStyle;
 
 import '../core/base_game.dart';
 import '../core/palette.dart';
+import '../shared/game_components.dart';
 
 /// Classic Breakout arcade game with pixel-art aesthetics.
 ///
@@ -78,7 +79,7 @@ class BreakoutGame extends BaseArcadeGame with DragCallbacks, TapCallbacks {
   int _totalBricksDestroyed = 0;
 
   // Visual effect components.
-  late _ScreenFlash _screenFlash;
+  late SharedScreenFlash _screenFlash;
 
   @override
   Color backgroundColor() => Pico8Palette.black;
@@ -89,7 +90,7 @@ class BreakoutGame extends BaseArcadeGame with DragCallbacks, TapCallbacks {
 
     final res = BaseArcadeGame.resolution;
 
-    _screenFlash = _ScreenFlash(size: res.clone());
+    _screenFlash = SharedScreenFlash(size: res.clone());
 
     world.addAll([
       _WallRenderer(),
@@ -286,7 +287,7 @@ class BreakoutGame extends BaseArcadeGame with DragCallbacks, TapCallbacks {
       score += points;
 
       // Spawn score popup.
-      world.add(_ScorePopup(
+      world.add(SharedScorePopup(
         position: Vector2(brick.rect.center.dx, brick.rect.center.dy),
         points: points,
       ));
@@ -569,42 +570,6 @@ class _BallRenderer extends PositionComponent {
 }
 
 // ---------------------------------------------------------------------------
-// Score popup: floating "+N" text that drifts up and fades
-// ---------------------------------------------------------------------------
-
-class _ScorePopup extends PositionComponent {
-  _ScorePopup({required super.position, required this.points});
-
-  final int points;
-
-  static const double _lifetime = 0.6;
-  static const double _driftSpeed = 35.0;
-
-  double _elapsed = 0;
-
-  @override
-  void update(double dt) {
-    super.update(dt);
-    _elapsed += dt;
-    position.y -= _driftSpeed * dt;
-    if (_elapsed >= _lifetime) {
-      removeFromParent();
-    }
-  }
-
-  @override
-  void render(Canvas canvas) {
-    super.render(canvas);
-    final opacity = (1.0 - (_elapsed / _lifetime)).clamp(0.0, 1.0);
-    final style = TextStyle(
-      color: Pico8Palette.yellow.withValues(alpha: opacity),
-      fontSize: 7,
-      fontFamily: 'monospace',
-    );
-    TextPaint(style: style).render(canvas, '+$points', Vector2.zero());
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Brick flash: brief white rectangle at destroyed brick position
 // ---------------------------------------------------------------------------
@@ -633,51 +598,6 @@ class _BrickFlash extends PositionComponent {
     final paint = Paint()
       ..color = Pico8Palette.white.withValues(alpha: opacity);
     canvas.drawRect(rect, paint);
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Screen flash on life loss
-// ---------------------------------------------------------------------------
-
-class _ScreenFlash extends RectangleComponent {
-  _ScreenFlash({required Vector2 size})
-      : super(
-          position: Vector2.zero(),
-          size: size,
-          paint: Paint()..color = Pico8Palette.darkPurple,
-          priority: 100,
-        );
-
-  double _timer = 0;
-  static const double _duration = 0.15;
-  bool _active = false;
-
-  @override
-  Future<void> onLoad() async {
-    await super.onLoad();
-    paint.color = Pico8Palette.darkPurple.withValues(alpha: 0);
-  }
-
-  void trigger() {
-    _active = true;
-    _timer = _duration;
-    paint.color = Pico8Palette.darkPurple;
-  }
-
-  @override
-  void update(double dt) {
-    super.update(dt);
-    if (_active) {
-      _timer -= dt;
-      if (_timer <= 0) {
-        _active = false;
-        paint.color = Pico8Palette.darkPurple.withValues(alpha: 0);
-      } else {
-        final opacity = (_timer / _duration).clamp(0.0, 1.0);
-        paint.color = Pico8Palette.darkPurple.withValues(alpha: opacity);
-      }
-    }
   }
 }
 

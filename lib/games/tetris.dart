@@ -7,6 +7,7 @@ import 'package:flutter/painting.dart' show TextStyle;
 
 import '../core/base_game.dart';
 import '../core/palette.dart';
+import '../shared/game_components.dart';
 
 /// Classic Tetris arcade game with pixel-art aesthetics.
 ///
@@ -347,12 +348,12 @@ class TetrisGame extends BaseArcadeGame with DragCallbacks, TapCallbacks {
 
       // Spawn score popup at the middle of cleared rows.
       final avgRow = _clearingLines.reduce((a, b) => a + b) / _clearingLines.length;
-      world.add(_ScorePopup(
+      world.add(SharedScorePopup(
         position: Vector2(
           _boardX + (_cols * _cellSize) / 2,
           _boardY + avgRow * _cellSize,
         ),
-        text: '+$points',
+        points: points,
       ));
 
       // Spawn line clear effect.
@@ -879,42 +880,3 @@ class _HudComponent extends PositionComponent {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Score popup: floating points text that drifts up and fades
-// ---------------------------------------------------------------------------
-
-class _ScorePopup extends PositionComponent {
-  _ScorePopup({required super.position, required this.text});
-
-  final String text;
-
-  static const double _lifetime = 0.6;
-  static const double _driftSpeed = 30.0;
-
-  double _elapsed = 0;
-
-  @override
-  int get priority => 20;
-
-  @override
-  void update(double dt) {
-    super.update(dt);
-    _elapsed += dt;
-    position.y -= _driftSpeed * dt;
-    if (_elapsed >= _lifetime) {
-      removeFromParent();
-    }
-  }
-
-  @override
-  void render(Canvas canvas) {
-    super.render(canvas);
-    final opacity = (1.0 - (_elapsed / _lifetime)).clamp(0.0, 1.0);
-    final style = TextStyle(
-      color: Pico8Palette.yellow.withValues(alpha: opacity),
-      fontSize: 7,
-      fontFamily: 'monospace',
-    );
-    TextPaint(style: style).render(canvas, text, Vector2.zero());
-  }
-}

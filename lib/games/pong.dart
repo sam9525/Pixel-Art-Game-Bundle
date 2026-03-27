@@ -4,10 +4,10 @@ import 'dart:ui' hide TextStyle;
 import 'package:flame/collisions.dart';
 import 'package:flame/components.dart';
 import 'package:flame/events.dart';
-import 'package:flutter/painting.dart' show TextStyle;
 
 import '../core/base_game.dart';
 import '../core/palette.dart';
+import '../shared/game_components.dart';
 
 /// Classic Pong arcade game with pixel-art aesthetics.
 ///
@@ -30,7 +30,7 @@ class PongGame extends BaseArcadeGame with DragCallbacks {
   late _Ball _ball;
   late _LeftWall _leftWall;
   late _RightWall _rightWall;
-  late _ScreenFlash _screenFlash;
+  late SharedScreenFlash _screenFlash;
 
   double _ballSpeed = _initialBallSpeed;
   bool _serving = true;
@@ -92,10 +92,10 @@ class PongGame extends BaseArcadeGame with DragCallbacks {
     final centerLine = _DashedCenterLine(resolution: res);
 
     // Screen flash overlay (invisible by default).
-    _screenFlash = _ScreenFlash(size: res.clone());
+    _screenFlash = SharedScreenFlash(size: res.clone());
 
     // Score / lives HUD.
-    final hud = _HudComponent(game: this);
+    final hud = SharedHudComponent(game: this, scorePosition: Vector2(4, res.y / 2 + 8), livesPosition: Vector2(res.x - 52, res.y / 2 + 8));
 
     world.addAll([
       _leftWall,
@@ -215,7 +215,7 @@ class PongGame extends BaseArcadeGame with DragCallbacks {
 
   /// Spawn a floating "+10" popup at the given position.
   void _spawnScorePopup(Vector2 pos) {
-    world.add(_ScorePopup(position: pos));
+    world.add(SharedScorePopup(position: pos, lifetime: 0.5, driftSpeed: 40.0));
   }
 
   /// Spawn 4-6 particle sparks at the paddle collision point.
@@ -521,88 +521,6 @@ class _DashedCenterLine extends PositionComponent {
 }
 
 // ---------------------------------------------------------------------------
-// Score popup: floating "+10" text that drifts up and fades
-// ---------------------------------------------------------------------------
-
-class _ScorePopup extends PositionComponent {
-  _ScorePopup({required super.position});
-
-  static const double _lifetime = 0.5;
-  static const double _driftSpeed = 40.0;
-
-  double _elapsed = 0;
-
-  @override
-  void update(double dt) {
-    super.update(dt);
-    _elapsed += dt;
-    position.y -= _driftSpeed * dt;
-    if (_elapsed >= _lifetime) {
-      removeFromParent();
-    }
-  }
-
-  @override
-  void render(Canvas canvas) {
-    super.render(canvas);
-    final opacity = (1.0 - (_elapsed / _lifetime)).clamp(0.0, 1.0);
-    final style = TextStyle(
-      color: Pico8Palette.yellow.withValues(alpha: opacity),
-      fontSize: 7,
-      fontFamily: 'monospace',
-    );
-    TextPaint(style: style).render(canvas, '+10', Vector2.zero());
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Screen flash on life loss
-// ---------------------------------------------------------------------------
-
-class _ScreenFlash extends RectangleComponent {
-  _ScreenFlash({required Vector2 size})
-      : super(
-          position: Vector2.zero(),
-          size: size,
-          paint: Paint()..color = Pico8Palette.darkPurple,
-          priority: 100,
-        );
-
-  double _timer = 0;
-  static const double _duration = 0.15;
-  bool _active = false;
-
-  @override
-  Future<void> onLoad() async {
-    await super.onLoad();
-    // Start invisible.
-    paint.color = Pico8Palette.darkPurple.withValues(alpha: 0);
-  }
-
-  /// Trigger a brief screen flash.
-  void trigger() {
-    _active = true;
-    _timer = _duration;
-    paint.color = Pico8Palette.darkPurple;
-  }
-
-  @override
-  void update(double dt) {
-    super.update(dt);
-    if (_active) {
-      _timer -= dt;
-      if (_timer <= 0) {
-        _active = false;
-        paint.color = Pico8Palette.darkPurple.withValues(alpha: 0);
-      } else {
-        final opacity = (_timer / _duration).clamp(0.0, 1.0);
-        paint.color = Pico8Palette.darkPurple.withValues(alpha: opacity);
-      }
-    }
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Particle sparks on paddle hit
 // ---------------------------------------------------------------------------
 
@@ -642,49 +560,5 @@ class _Particle extends RectangleComponent {
 
     final opacity = (1.0 - (_elapsed / _lifetime)).clamp(0.0, 1.0);
     paint.color = _baseColor.withValues(alpha: opacity);
-  }
-}
-
-// ---------------------------------------------------------------------------
-// HUD: score and lives
-// ---------------------------------------------------------------------------
-
-class _HudComponent extends PositionComponent {
-  _HudComponent({required this.game});
-
-  final PongGame game;
-
-  late final TextPaint _textPaint;
-
-  @override
-  Future<void> onLoad() async {
-    await super.onLoad();
-    _textPaint = TextPaint(
-      style: TextStyle(
-        color: Pico8Palette.white,
-        fontSize: 8,
-        fontFamily: 'monospace',
-      ),
-    );
-  }
-
-  @override
-  void render(Canvas canvas) {
-    super.render(canvas);
-    final res = BaseArcadeGame.resolution;
-
-    // Score on the left side of center.
-    _textPaint.render(
-      canvas,
-      'SCORE:${game.score}',
-      Vector2(4, res.y / 2 + 8),
-    );
-
-    // Lives on the right side of center.
-    _textPaint.render(
-      canvas,
-      'LIVES:${game.lives}',
-      Vector2(res.x - 52, res.y / 2 + 8),
-    );
   }
 }

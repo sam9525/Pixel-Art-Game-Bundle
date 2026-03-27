@@ -9,6 +9,7 @@ import 'package:flutter/widgets.dart' show KeyEventResult;
 
 import '../core/base_game.dart';
 import '../core/palette.dart';
+import '../shared/game_components.dart';
 
 // ---------------------------------------------------------------------------
 // Game state
@@ -147,7 +148,7 @@ class AsteroidsGame extends BaseArcadeGame
   final List<double> _starBrightness = [];
 
   // Effect components
-  late _ScreenFlash _screenFlash;
+  late SharedScreenFlash _screenFlash;
 
   @override
   Color backgroundColor() => Pico8Palette.black;
@@ -157,7 +158,7 @@ class AsteroidsGame extends BaseArcadeGame
     await super.onLoad();
 
     final res = BaseArcadeGame.resolution;
-    _screenFlash = _ScreenFlash(size: res.clone());
+    _screenFlash = SharedScreenFlash(size: res.clone());
 
     _generateStars();
 
@@ -334,7 +335,7 @@ class AsteroidsGame extends BaseArcadeGame
     }
 
     // Score popup
-    world.add(_ScorePopup(
+    world.add(SharedScorePopup(
       position: Vector2(asteroid.x, asteroid.y),
       points: pts,
     ));
@@ -656,7 +657,7 @@ class AsteroidsGame extends BaseArcadeGame
           lives += 1;
         }
 
-        world.add(_ScorePopup(
+        world.add(SharedScorePopup(
           position: Vector2(_ufoX + _ufoWidth / 2, 20.0),
           points: pts,
         ));
@@ -1166,88 +1167,6 @@ class _AsteroidExplosion extends PositionComponent {
     final paint = Paint()
       ..color = Pico8Palette.white.withValues(alpha: opacity * 0.7);
     canvas.drawCircle(_centerPos, radius * (0.5 + _elapsed / _lifetime * 0.5), paint);
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Score popup: floating "+N" text
-// ---------------------------------------------------------------------------
-
-class _ScorePopup extends PositionComponent {
-  _ScorePopup({required super.position, required this.points});
-
-  final int points;
-
-  static const double _lifetime = 0.8;
-  static const double _driftSpeed = 25.0;
-
-  double _elapsed = 0;
-
-  @override
-  void update(double dt) {
-    super.update(dt);
-    _elapsed += dt;
-    position.y -= _driftSpeed * dt;
-    if (_elapsed >= _lifetime) {
-      removeFromParent();
-    }
-  }
-
-  @override
-  void render(Canvas canvas) {
-    super.render(canvas);
-    final opacity = (1.0 - (_elapsed / _lifetime)).clamp(0.0, 1.0);
-    final style = TextStyle(
-      color: Pico8Palette.yellow.withValues(alpha: opacity),
-      fontSize: 6,
-      fontFamily: 'PressStart2P',
-    );
-    TextPaint(style: style).render(canvas, '+$points', Vector2.zero());
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Screen flash on death
-// ---------------------------------------------------------------------------
-
-class _ScreenFlash extends RectangleComponent {
-  _ScreenFlash({required Vector2 size})
-      : super(
-          position: Vector2.zero(),
-          size: size,
-          paint: Paint()..color = Pico8Palette.darkPurple,
-          priority: 100,
-        );
-
-  double _timer = 0;
-  static const double _duration = 0.2;
-  bool _active = false;
-
-  @override
-  Future<void> onLoad() async {
-    await super.onLoad();
-    paint.color = Pico8Palette.darkPurple.withValues(alpha: 0);
-  }
-
-  void trigger() {
-    _active = true;
-    _timer = _duration;
-    paint.color = Pico8Palette.darkPurple;
-  }
-
-  @override
-  void update(double dt) {
-    super.update(dt);
-    if (_active) {
-      _timer -= dt;
-      if (_timer <= 0) {
-        _active = false;
-        paint.color = Pico8Palette.darkPurple.withValues(alpha: 0);
-      } else {
-        final opacity = (_timer / _duration).clamp(0.0, 1.0);
-        paint.color = Pico8Palette.darkPurple.withValues(alpha: opacity * 0.5);
-      }
-    }
   }
 }
 

@@ -7,6 +7,7 @@ import 'package:flutter/painting.dart' show TextStyle;
 
 import '../core/base_game.dart';
 import '../core/palette.dart';
+import '../shared/game_components.dart';
 
 /// Classic Pac-Man arcade game with pixel-art aesthetics.
 ///
@@ -93,8 +94,8 @@ class PacManGame extends BaseArcadeGame with DragCallbacks, TapCallbacks {
   static const double fruitDuration = 9.0;
 
   // Visual effects.
-  late _ScreenFlash _screenFlash;
-  final List<_ScorePopup> _popups = [];
+  late SharedScreenFlash _screenFlash;
+  final List<SharedScorePopup> _popups = [];
 
   // The maze layout template (28×28).
   // 1=wall, 0=empty(pellet), 3=power pellet, 4=ghost home, 5=ghost door
@@ -136,7 +137,7 @@ class PacManGame extends BaseArcadeGame with DragCallbacks, TapCallbacks {
   Future<void> onLoad() async {
     await super.onLoad();
 
-    _screenFlash = _ScreenFlash(size: BaseArcadeGame.resolution.clone());
+    _screenFlash = SharedScreenFlash(size: BaseArcadeGame.resolution.clone());
 
     _buildMaze();
     _initGhosts();
@@ -371,7 +372,7 @@ class PacManGame extends BaseArcadeGame with DragCallbacks, TapCallbacks {
     }
 
     // Update popups.
-    _popups.removeWhere((p) => p.isDead);
+    _popups.removeWhere((p) => p.parent == null);
   }
 
   void _movePacMan() {
@@ -598,12 +599,12 @@ class PacManGame extends BaseArcadeGame with DragCallbacks, TapCallbacks {
   }
 
   void _addPopup(Point<int> pos, int points) {
-    final popup = _ScorePopup(
+    final popup = SharedScorePopup(
       position: Vector2(
         (pos.x + mazeOffsetX) * cellSize + cellSize / 2,
         (pos.y + mazeOffsetY) * cellSize.toDouble(),
       ),
-      text: '+$points',
+      points: points,
     );
     _popups.add(popup);
     world.add(popup);
@@ -1085,89 +1086,6 @@ class _FruitRenderer extends PositionComponent {
       Rect.fromLTWH(px + 3.0, py + 3.0, 1, 1),
       _highlightPaint,
     );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Score popup: floating text that drifts up and fades
-// ---------------------------------------------------------------------------
-
-class _ScorePopup extends PositionComponent {
-  _ScorePopup({required super.position, required this.text});
-
-  final String text;
-  static const double _lifetime = 0.8;
-  static const double _driftSpeed = 30.0;
-
-  double _elapsed = 0;
-  bool isDead = false;
-
-  @override
-  void update(double dt) {
-    super.update(dt);
-    _elapsed += dt;
-    position.y -= _driftSpeed * dt;
-    if (_elapsed >= _lifetime) {
-      isDead = true;
-      removeFromParent();
-    }
-  }
-
-  @override
-  void render(Canvas canvas) {
-    super.render(canvas);
-    final opacity = (1.0 - (_elapsed / _lifetime)).clamp(0.0, 1.0);
-    final style = TextStyle(
-      color: Pico8Palette.yellow.withValues(alpha: opacity),
-      fontSize: 6,
-      fontFamily: 'monospace',
-    );
-    TextPaint(style: style).render(canvas, text, Vector2.zero());
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Screen flash on life loss
-// ---------------------------------------------------------------------------
-
-class _ScreenFlash extends RectangleComponent {
-  _ScreenFlash({required Vector2 size})
-      : super(
-          position: Vector2.zero(),
-          size: size,
-          paint: Paint()..color = Pico8Palette.darkPurple,
-          priority: 100,
-        );
-
-  double _timer = 0;
-  static const double _duration = 0.15;
-  bool _active = false;
-
-  @override
-  Future<void> onLoad() async {
-    await super.onLoad();
-    paint.color = Pico8Palette.darkPurple.withValues(alpha: 0);
-  }
-
-  void trigger() {
-    _active = true;
-    _timer = _duration;
-    paint.color = Pico8Palette.darkPurple;
-  }
-
-  @override
-  void update(double dt) {
-    super.update(dt);
-    if (_active) {
-      _timer -= dt;
-      if (_timer <= 0) {
-        _active = false;
-        paint.color = Pico8Palette.darkPurple.withValues(alpha: 0);
-      } else {
-        final opacity = (_timer / _duration).clamp(0.0, 1.0);
-        paint.color = Pico8Palette.darkPurple.withValues(alpha: opacity);
-      }
-    }
   }
 }
 
